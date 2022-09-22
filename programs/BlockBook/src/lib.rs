@@ -1,4 +1,5 @@
 use anchor_lang::prelude::*;
+use anchor_lang::solana_program::system_program;
 
 declare_id!("5EtTrvMn7TX7UAh9jwskq6Rmy9nQyvjFfvy2g7Nn1vgs");
 
@@ -6,14 +7,37 @@ declare_id!("5EtTrvMn7TX7UAh9jwskq6Rmy9nQyvjFfvy2g7Nn1vgs");
 pub mod block_book {
     use super::*;
 
-    pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
+    pub fn send_post(ctx: Context<SendPost>, topic: String, content: String) -> ProgramResult {
+        let post: &mut Account<Post> = &mut ctx.accounts.post;
+        let author: &Signer = &ctx.accounts.author;
+        let clock: Clock = Clock::get().unwrap();
+
+        if topic.chars().count() > 50 {
+            return Err(ErrorCode::TopicTooLong.into())
+        }
+    
+        if content.chars().count() > 280 {
+            return Err(ErrorCode::ContentTooLong.into())
+        }
+
+        post.author = *author.key;
+        post.timestamp = clock.unix_timestamp;
+        post.topic = topic;
+        post.content = content;
+
         Ok(())
     }
 }
 
 #[derive(Accounts)]
-pub struct Initialize {}
-
+pub struct SendPost<'info> {
+    #[account(init, payer = author, space = Post :: LEN)]
+    pub post: Account<'info, Post>,
+    #[account(mut)]
+    pub author: Signer<'info>,
+    #[account(address = system_program :: ID)]
+    pub system_program: AccountInfo<'info>,
+}
 // 1. Define the structure of the Post account.
 #[account]
 pub struct Post {
@@ -38,4 +62,12 @@ impl Post {
         + TIMESTAMP_LENGTH // Timestamp.
         + STRING_LENGTH_PREFIX + MAX_TOPIC_LENGTH // Topic.
         + STRING_LENGTH_PREFIX + MAX_CONTENT_LENGTH; // Content.
+}
+
+#[error_code]
+pub enum ErrorCode {
+    #[msg("The provided topic should be 50 characters long maximum.")]
+    TopicTooLong,
+    #[msg("The provided content should be 280 characters long maximum.")]
+    ContentTooLong,
 }
